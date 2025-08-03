@@ -6,17 +6,21 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 import sneakerRoutes from './routes/sneakers.js';
 import searchRoutes from './routes/search.js';
+
+// Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Middleware
 app.use(cors({
   origin: 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json()); // <-- Add this
+app.use(express.json());
 
+// Routes
 app.use('/api/sneakers', sneakerRoutes);
 app.use('/api/search', searchRoutes);
 
@@ -25,26 +29,31 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/brands', async (req, res) => {
-  const options = {
-    method: 'GET',
-    url: 'https://the-sneaker-database.p.rapidapi.com/brands',
-    headers: {
-      'x-rapidapi-key': process.env.RAPIDAPI_KEY,
-      'x-rapidapi-host': 'the-sneaker-database.p.rapidapi.com'
-    }
-  };
-
   try {
-    const response = await axios.request(options);
-    res.json(response.data);
+    // Check if API key is available
+    if (!process.env.RAPIDAPI_KEY) {
+      console.log('No API key found, returning empty brands array');
+      return res.json({ results: [] });
+    }
+
+    // Fetch brands from the sneaker API
+    const { fetchRealSneakerData } = await import('./utils/sneakerApi.js');
+    const sneakers = await fetchRealSneakerData();
+    const brands = [...new Set(sneakers.map(sneaker => sneaker.brand))];
+    
+    res.json({ results: brands });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to fetch brands' });
+    console.error('Brands API error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch brands',
+      results: []
+    });
   }
 });
 
 // Error handling middleware
 app.use((error, req, res, next) => {
+  console.error('Server error:', error);
   res.status(error.status || 500).json({ error: error.message });
 });
 
@@ -53,6 +62,14 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Start server with error handling
+try {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`API Key configured: ${process.env.RAPIDAPI_KEY ? 'Yes' : 'No'}`);
+  });
+} catch (error) {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+}

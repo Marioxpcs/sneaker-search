@@ -1,5 +1,5 @@
 // API service for connecting to backend
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api`;
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 export interface Sneaker {
   id: number;
@@ -20,7 +20,6 @@ export interface SearchFilters {
   brand?: string;
   priceRange?: string;
   sortBy?: string;
-  useRealApi?: boolean;
 }
 
 export interface ApiResponse<T> {
@@ -50,7 +49,7 @@ export interface UploadResponse {
 // Generic API call function
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
       headers: {
         'Content-Type': 'application/json',
         ...options?.headers,
@@ -78,7 +77,6 @@ export async function getSneakers(filters?: SearchFilters): Promise<ApiResponse<
   if (filters?.brand) params.append('brand', filters.brand);
   if (filters?.priceRange) params.append('priceRange', filters.priceRange);
   if (filters?.sortBy) params.append('sortBy', filters.sortBy);
-  if (filters?.useRealApi) params.append('useRealApi', filters.useRealApi.toString());
 
   const queryString = params.toString();
   const endpoint = `/sneakers${queryString ? `?${queryString}` : ''}`;
@@ -111,10 +109,11 @@ export async function uploadImage(description: string): Promise<UploadResponse> 
 // Get all brands
 export async function getBrands() {
   try {
-    const res = await fetch(`${API_BASE_URL}/brands`);
+    const res = await fetch(`${API_BASE_URL}/api/brands`);
     const data = await res.json();
 
-    const brandNames = data.results?.map((b: any) => b.name) ?? [];
+    // The backend returns { results: ["Nike", "Adidas", ...] }
+    const brandNames = data.results ?? [];
 
     return {
       success: true,
@@ -128,8 +127,6 @@ export async function getBrands() {
     };
   }
 }
-
-
 
 // Get price comparison for a sneaker
 export async function getPriceComparison(sneakerId: number): Promise<ApiResponse<any>> {

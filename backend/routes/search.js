@@ -1,67 +1,10 @@
 import express from 'express';
+import { fetchRealSneakerData } from '../utils/sneakerApi.js';
+
 const router = express.Router();
 
-// Mock retailer data (in real app, this would come from external APIs)
-const mockRetailers = {
-  "Foot Locker": {
-    name: "Foot Locker",
-    logo: "https://example.com/footlocker-logo.png",
-    rating: 4.2,
-    shipping: "Free shipping on orders over $50"
-  },
-  "GOAT": {
-    name: "GOAT",
-    logo: "https://example.com/goat-logo.png", 
-    rating: 4.5,
-    shipping: "Free shipping on all orders"
-  },
-  "StockX": {
-    name: "StockX",
-    logo: "https://example.com/stockx-logo.png",
-    rating: 4.3,
-    shipping: "Free shipping on orders over $100"
-  },
-  "Nike": {
-    name: "Nike",
-    logo: "https://example.com/nike-logo.png",
-    rating: 4.6,
-    shipping: "Free shipping on all orders"
-  },
-  "Converse": {
-    name: "Converse",
-    logo: "https://example.com/converse-logo.png",
-    rating: 4.1,
-    shipping: "Free shipping on orders over $75"
-  },
-  "Vans": {
-    name: "Vans",
-    logo: "https://example.com/vans-logo.png",
-    rating: 4.0,
-    shipping: "Free shipping on orders over $60"
-  }
-};
-
-// Mock price comparison data
-const mockPriceComparison = {
-  "Nike Air Max 97": [
-    { store: "Foot Locker", price: 180, inStock: true, shipping: "Free" },
-    { store: "Nike", price: 175, inStock: true, shipping: "Free" },
-    { store: "StockX", price: 190, inStock: true, shipping: "Free" }
-  ],
-  "Adidas Yeezy Boost 350": [
-    { store: "GOAT", price: 220, inStock: true, shipping: "Free" },
-    { store: "StockX", price: 225, inStock: true, shipping: "Free" },
-    { store: "Foot Locker", price: 230, inStock: false, shipping: "N/A" }
-  ],
-  "New Balance 550": [
-    { store: "StockX", price: 110, inStock: true, shipping: "Free" },
-    { store: "Foot Locker", price: 115, inStock: true, shipping: "Free" },
-    { store: "Nike", price: 120, inStock: false, shipping: "N/A" }
-  ]
-};
-
 // GET /api/search - Advanced search with filters
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { 
       query, 
@@ -72,50 +15,36 @@ router.get('/', (req, res) => {
       limit = 20,
       page = 1 
     } = req.query;
+    
+    // Get real sneaker data
+    const searchResults = await fetchRealSneakerData(query || 'nike');
+    
+    if (searchResults.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          totalPages: 0
+        },
+        filters: {
+          query,
+          brand,
+          priceMin,
+          priceMax,
+          sortBy
+        },
+        message: 'No sneakers found. Please check your API key configuration.'
+      });
+    }
 
-    // Mock search results
-    let searchResults = [
-      {
-        id: 1,
-        name: "Nike Air Max 97",
-        brand: "Nike",
-        colorway: "Silver Bullet",
-        image: "/sneakers/airmax97.jpg",
-        price: 180,
-        store: "Foot Locker",
-        rating: 4.5,
-        reviews: 1247,
-        description: "Classic Nike Air Max 97 in Silver Bullet colorway"
-      },
-      {
-        id: 2,
-        name: "Adidas Yeezy Boost 350",
-        brand: "Adidas",
-        colorway: "Zebra",
-        image: "/sneakers/yeezy350.jpg",
-        price: 220,
-        store: "GOAT",
-        rating: 4.8,
-        reviews: 2156,
-        description: "Kanye West's iconic Yeezy Boost 350 in Zebra pattern"
-      },
-      {
-        id: 3,
-        name: "New Balance 550",
-        brand: "New Balance",
-        colorway: "White/Green",
-        image: "/sneakers/nb550.jpg",
-        price: 110,
-        store: "StockX",
-        rating: 4.2,
-        reviews: 892,
-        description: "Retro-inspired New Balance 550 in White/Green"
-      }
-    ];
+    let filteredResults = [...searchResults];
 
     // Apply filters
     if (query) {
-      searchResults = searchResults.filter(item =>
+      filteredResults = filteredResults.filter(item =>
         item.name.toLowerCase().includes(query.toLowerCase()) ||
         item.brand.toLowerCase().includes(query.toLowerCase()) ||
         item.description.toLowerCase().includes(query.toLowerCase())
@@ -123,20 +52,20 @@ router.get('/', (req, res) => {
     }
 
     if (brand) {
-      searchResults = searchResults.filter(item => item.brand === brand);
+      filteredResults = filteredResults.filter(item => item.brand === brand);
     }
 
     if (priceMin) {
-      searchResults = searchResults.filter(item => item.price >= parseInt(priceMin));
+      filteredResults = filteredResults.filter(item => item.price >= parseInt(priceMin));
     }
 
     if (priceMax) {
-      searchResults = searchResults.filter(item => item.price <= parseInt(priceMax));
+      filteredResults = filteredResults.filter(item => item.price <= parseInt(priceMax));
     }
 
     // Apply sorting
     if (sortBy) {
-      searchResults.sort((a, b) => {
+      filteredResults.sort((a, b) => {
         switch (sortBy) {
           case 'price-low':
             return a.price - b.price;
@@ -156,7 +85,7 @@ router.get('/', (req, res) => {
     // Apply pagination
     const startIndex = (parseInt(page) - 1) * parseInt(limit);
     const endIndex = startIndex + parseInt(limit);
-    const paginatedResults = searchResults.slice(startIndex, endIndex);
+    const paginatedResults = filteredResults.slice(startIndex, endIndex);
 
     res.json({
       success: true,
@@ -164,8 +93,8 @@ router.get('/', (req, res) => {
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: searchResults.length,
-        totalPages: Math.ceil(searchResults.length / parseInt(limit))
+        total: filteredResults.length,
+        totalPages: Math.ceil(filteredResults.length / parseInt(limit))
       },
       filters: {
         query,
@@ -186,55 +115,56 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/search/price-comparison/:sneakerId - Get price comparison for a sneaker
-router.get('/price-comparison/:sneakerId', (req, res) => {
+router.get('/price-comparison/:sneakerId', async (req, res) => {
   try {
     const sneakerId = parseInt(req.params.sneakerId);
     
-    // Mock price comparison data
+    // Get real sneaker data
+    const sneakers = await fetchRealSneakerData();
+    const sneaker = sneakers.find(s => s.id === sneakerId);
+    
+    if (!sneaker) {
+      return res.status(404).json({
+        success: false,
+        error: 'Sneaker not found'
+      });
+    }
+    
+    // Mock price comparison data based on real sneaker
     const priceComparison = {
       sneakerId: sneakerId,
-      sneakerName: "Nike Air Max 97",
+      sneakerName: sneaker.name,
       prices: [
         {
-          store: "Foot Locker",
-          price: 180,
-          originalPrice: 200,
-          discount: "10% off",
-          inStock: true,
-          shipping: "Free",
-          deliveryTime: "2-4 days",
-          rating: 4.2
-        },
-        {
-          store: "Nike",
-          price: 175,
-          originalPrice: 175,
-          discount: null,
-          inStock: true,
-          shipping: "Free",
-          deliveryTime: "1-3 days",
-          rating: 4.6
-        },
-        {
           store: "StockX",
-          price: 190,
-          originalPrice: 190,
-          discount: null,
+          price: sneaker.price,
+          originalPrice: sneaker.retailPrice || sneaker.price,
+          discount: sneaker.retailPrice && sneaker.price < sneaker.retailPrice ? `${Math.round(((sneaker.retailPrice - sneaker.price) / sneaker.retailPrice) * 100)}% off` : null,
           inStock: true,
           shipping: "Free",
           deliveryTime: "3-5 days",
-          rating: 4.3
+          rating: sneaker.rating
+        },
+        {
+          store: "GOAT",
+          price: Math.round(sneaker.price * 1.05),
+          originalPrice: Math.round(sneaker.price * 1.05),
+          discount: null,
+          inStock: true,
+          shipping: "Free",
+          deliveryTime: "2-4 days",
+          rating: (sneaker.rating - 0.1).toFixed(1)
         }
       ],
       bestPrice: {
-        store: "Nike",
-        price: 175,
-        savings: 25
+        store: "StockX",
+        price: sneaker.price,
+        savings: sneaker.retailPrice ? sneaker.retailPrice - sneaker.price : 0
       },
-      averagePrice: 181.67,
+      averagePrice: Math.round((sneaker.price + Math.round(sneaker.price * 1.05)) / 2),
       priceRange: {
-        min: 175,
-        max: 190
+        min: sneaker.price,
+        max: Math.round(sneaker.price * 1.05)
       }
     };
 
@@ -255,9 +185,24 @@ router.get('/price-comparison/:sneakerId', (req, res) => {
 // GET /api/search/retailers - Get all available retailers
 router.get('/retailers', (req, res) => {
   try {
+    const retailers = [
+      {
+        name: "StockX",
+        logo: "https://via.placeholder.com/100x50?text=StockX",
+        rating: 4.3,
+        shipping: "Free shipping on orders over $100"
+      },
+      {
+        name: "GOAT",
+        logo: "https://via.placeholder.com/100x50?text=GOAT", 
+        rating: 4.5,
+        shipping: "Free shipping on all orders"
+      }
+    ];
+    
     res.json({
       success: true,
-      data: Object.values(mockRetailers)
+      data: retailers
     });
   } catch (error) {
     res.status(500).json({
@@ -269,40 +214,21 @@ router.get('/retailers', (req, res) => {
 });
 
 // GET /api/search/trending - Get trending sneakers
-router.get('/trending', (req, res) => {
+router.get('/trending', async (req, res) => {
   try {
-    const trendingSneakers = [
-      {
-        id: 1,
-        name: "Nike Air Max 97",
-        brand: "Nike",
-        image: "/sneakers/airmax97.jpg",
-        price: 180,
-        trend: "up",
-        trendPercentage: 15,
-        searchVolume: "High"
-      },
-      {
-        id: 2,
-        name: "Adidas Yeezy Boost 350",
-        brand: "Adidas",
-        image: "/sneakers/yeezy350.jpg",
-        price: 220,
-        trend: "up",
-        trendPercentage: 8,
-        searchVolume: "Very High"
-      },
-      {
-        id: 3,
-        name: "New Balance 550",
-        brand: "New Balance",
-        image: "/sneakers/nb550.jpg",
-        price: 110,
-        trend: "down",
-        trendPercentage: 5,
-        searchVolume: "Medium"
-      }
-    ];
+    // Get real sneaker data
+    const sneakers = await fetchRealSneakerData('nike');
+    
+    const trendingSneakers = sneakers.slice(0, 3).map((sneaker, index) => ({
+      id: sneaker.id,
+      name: sneaker.name,
+      brand: sneaker.brand,
+      image: sneaker.image,
+      price: sneaker.price,
+      trend: index % 2 === 0 ? "up" : "down",
+      trendPercentage: Math.floor(Math.random() * 20) + 1,
+      searchVolume: index === 0 ? "Very High" : index === 1 ? "High" : "Medium"
+    }));
 
     res.json({
       success: true,
