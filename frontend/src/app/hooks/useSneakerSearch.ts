@@ -1,24 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Sneaker, SearchFilters } from '../types/sneaker';
 
-interface Sneaker {
-  id: number;
-  name: string;
-  brand: string;
-  colorway: string;
-  image: string;
-  price: number;
-  store: string;
-  rating: string;
-  reviews: number;
-  description: string;
-}
-
-interface SearchOptions {
-  query?: string;
-  brand?: string;
-  priceMin?: number;
-  priceMax?: number;
-  sortBy?: string;
+interface SearchOptions extends SearchFilters {
   page?: number;
   limit?: number;
 }
@@ -40,8 +23,24 @@ export function useSneakerSearch(options: SearchOptions) {
       try {
         const res = await fetch(`/api/search?${params.toString()}`);
         const data = await res.json();
-        setSneakers(data.data);
-        setTotal(data.total);
+        
+        // Transform data to match Sneaker interface
+        const transformedSneakers = data.data?.map((sneaker: any) => ({
+          id: sneaker.id,
+          name: sneaker.name,
+          brand: sneaker.brand,
+          colorway: sneaker.colorway || "Default Colorway",
+          price: sneaker.price,
+          image: sneaker.image,
+          rating: typeof sneaker.rating === 'string' ? parseFloat(sneaker.rating) : sneaker.rating || 0,
+          reviews: sneaker.reviews || 0,
+          store: sneaker.store || "Unknown Store",
+          description: sneaker.description,
+          isRealData: sneaker.isRealData || false
+        })) || [];
+        
+        setSneakers(transformedSneakers);
+        setTotal(data.total || transformedSneakers.length);
       } catch (err) {
         console.error('Error fetching sneakers:', err);
       } finally {

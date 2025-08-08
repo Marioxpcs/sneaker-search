@@ -1,50 +1,7 @@
 // API service for connecting to backend
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-export interface Sneaker {
-  id: number;
-  name: string;
-  brand: string;
-  colorway: string;
-  image: string;
-  price: number;
-  store: string;
-  rating: number;
-  reviews: number;
-  description?: string;
-  isRealData?: boolean;
-}
-
-export interface SearchFilters {
-  search?: string;
-  brand?: string;
-  priceRange?: string;
-  sortBy?: string;
-}
-
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  count?: number;
-  total?: number;
-  error?: string;
-  message?: string;
-  hasRealData?: boolean;
-  source?: string;
-}
-
-export interface UploadResponse {
-  success: boolean;
-  identifiedSneaker?: Sneaker;
-  similarSneakers?: Sneaker[];
-  analysis?: {
-    brand: string;
-    model: string;
-    colorway: string;
-    confidence: number;
-    processingTime: string;
-  };
-}
+import { Sneaker, SearchFilters, ApiResponse, UploadResponse } from './types/sneaker';
 
 // Generic API call function
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -69,7 +26,7 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
   }
 }
 
-// Get all sneakers with optional filters
+// Get all sneakers with optional filters (using search endpoint for consistency)
 export async function getSneakers(filters?: SearchFilters): Promise<ApiResponse<Sneaker[]>> {
   const params = new URLSearchParams();
   
@@ -79,9 +36,29 @@ export async function getSneakers(filters?: SearchFilters): Promise<ApiResponse<
   if (filters?.sortBy) params.append('sortBy', filters.sortBy);
 
   const queryString = params.toString();
-  const endpoint = `/sneakers${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/search${queryString ? `?${queryString}` : ''}`;
   
-  return apiCall<ApiResponse<Sneaker[]>>(endpoint);
+  const response = await apiCall<ApiResponse<any[]>>(endpoint);
+  
+  // Transform data to match Sneaker interface
+  const transformedData = response.data?.map((sneaker: any) => ({
+    id: sneaker.id,
+    name: sneaker.name,
+    brand: sneaker.brand,
+    colorway: sneaker.colorway || "Default Colorway",
+    price: sneaker.price,
+    image: sneaker.image,
+    rating: typeof sneaker.rating === 'string' ? parseFloat(sneaker.rating) : sneaker.rating || 0,
+    reviews: sneaker.reviews || 0,
+    store: sneaker.store || "Unknown Store",
+    description: sneaker.description,
+    isRealData: sneaker.isRealData || false
+  })) || [];
+  
+  return {
+    ...response,
+    data: transformedData
+  };
 }
 
 // Get real sneaker data from external APIs
@@ -90,12 +67,52 @@ export async function getRealSneakerData(query: string): Promise<ApiResponse<Sne
   params.append('query', query);
   
   const endpoint = `/sneakers/real-data/search?${params.toString()}`;
-  return apiCall<ApiResponse<Sneaker[]>>(endpoint);
+  const response = await apiCall<ApiResponse<any[]>>(endpoint);
+  
+  // Transform data to match Sneaker interface
+  const transformedData = response.data?.map((sneaker: any) => ({
+    id: sneaker.id,
+    name: sneaker.name,
+    brand: sneaker.brand,
+    colorway: sneaker.colorway || "Default Colorway",
+    price: sneaker.price,
+    image: sneaker.image,
+    rating: typeof sneaker.rating === 'string' ? parseFloat(sneaker.rating) : sneaker.rating || 0,
+    reviews: sneaker.reviews || 0,
+    store: sneaker.store || "Unknown Store",
+    description: sneaker.description,
+    isRealData: true
+  })) || [];
+  
+  return {
+    ...response,
+    data: transformedData
+  };
 }
 
 // Get specific sneaker by ID
 export async function getSneaker(id: number): Promise<ApiResponse<Sneaker>> {
-  return apiCall<ApiResponse<Sneaker>>(`/sneakers/${id}`);
+  const response = await apiCall<ApiResponse<any>>(`/sneakers/${id}`);
+  
+  // Transform data to match Sneaker interface
+  const transformedData = {
+    id: response.data.id,
+    name: response.data.name,
+    brand: response.data.brand,
+    colorway: response.data.colorway || "Default Colorway",
+    price: response.data.price,
+    image: response.data.image,
+    rating: typeof response.data.rating === 'string' ? parseFloat(response.data.rating) : response.data.rating || 0,
+    reviews: response.data.reviews || 0,
+    store: response.data.store || "Unknown Store",
+    description: response.data.description,
+    isRealData: response.data.isRealData || false
+  };
+  
+  return {
+    ...response,
+    data: transformedData
+  };
 }
 
 // Upload image for analysis

@@ -8,6 +8,7 @@ router.get('/', async (req, res) => {
   try {
     const { 
       query, 
+      search, // Add support for 'search' parameter
       brand, 
       priceMin, 
       priceMax, 
@@ -16,8 +17,11 @@ router.get('/', async (req, res) => {
       page = 1 
     } = req.query;
     
+    // Use either 'query' or 'search' parameter
+    const searchTerm = query || search || 'nike';
+    
     // Get real sneaker data
-    const searchResults = await fetchRealSneakerData(query || 'nike');
+    const searchResults = await fetchRealSneakerData(searchTerm);
     
     if (searchResults.length === 0) {
       return res.json({
@@ -30,7 +34,7 @@ router.get('/', async (req, res) => {
           totalPages: 0
         },
         filters: {
-          query,
+          query: searchTerm,
           brand,
           priceMin,
           priceMax,
@@ -43,11 +47,11 @@ router.get('/', async (req, res) => {
     let filteredResults = [...searchResults];
 
     // Apply filters
-    if (query) {
+    if (searchTerm) {
       filteredResults = filteredResults.filter(item =>
-        item.name.toLowerCase().includes(query.toLowerCase()) ||
-        item.brand.toLowerCase().includes(query.toLowerCase()) ||
-        item.description.toLowerCase().includes(query.toLowerCase())
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -71,6 +75,8 @@ router.get('/', async (req, res) => {
             return a.price - b.price;
           case 'price-high':
             return b.price - a.price;
+          case 'price':
+            return a.price - b.price;
           case 'rating':
             return b.rating - a.rating;
           case 'reviews':
@@ -97,7 +103,7 @@ router.get('/', async (req, res) => {
         totalPages: Math.ceil(filteredResults.length / parseInt(limit))
       },
       filters: {
-        query,
+        query: searchTerm,
         brand,
         priceMin,
         priceMax,

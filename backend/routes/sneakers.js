@@ -11,6 +11,9 @@ router.get('/', async (req, res) => {
   try {
     const { search, brand, priceRange, sortBy } = req.query;
     
+    // Check if API key is configured
+    const isApiConfigured = !!process.env.RAPIDAPI_KEY;
+    
     // Fetch real data from API
     const sneakers = await fetchRealSneakerData(search || 'nike');
     
@@ -20,8 +23,10 @@ router.get('/', async (req, res) => {
         data: [],
         count: 0,
         total: 0,
-        hasRealData: false,
-        message: 'No sneakers found. Please check your API key configuration or try a different search term.'
+        hasRealData: isApiConfigured,
+        message: isApiConfigured 
+          ? 'No sneakers found for this search term. Try a different search or check your API key.'
+          : 'No sneakers found. Please configure your RapidAPI key in the backend environment variables.'
       });
     }
     
@@ -81,7 +86,7 @@ router.get('/', async (req, res) => {
       data: filteredSneakers,
       count: filteredSneakers.length,
       total: sneakers.length,
-      hasRealData: true
+      hasRealData: isApiConfigured
     });
   } catch (error) {
     res.status(500).json({

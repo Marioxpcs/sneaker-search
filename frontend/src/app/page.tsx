@@ -1,429 +1,223 @@
 "use client";
-import { useState, useEffect } from "react";
-import { getSneakers, uploadImage, getBrands, getRealSneakerData, type Sneaker, type SearchFilters } from "./api";
 
-export default function Home() {
-  const [searchQuery, setSearchQuery] = useState("");
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { Search, Upload, Menu } from "lucide-react";
+import SneakerGrid from "./components/SneakerGrid";
+import { Sneaker } from "./types/sneaker";
+
+// ✅ Reusable status banner component
+function StatusBanner({ type, title, message }: { type: "error" | "warning" | "success" | "info"; title: string; message: string }) {
+  const colors = {
+    error: "bg-red-50 border-red-200 text-red-800",
+    warning: "bg-yellow-50 border-yellow-200 text-yellow-800",
+    success: "bg-green-50 border-green-200 text-green-800",
+    info: "bg-blue-50 border-blue-200 text-blue-800",
+  };
+  return (
+    <div className={`border p-4 rounded-lg mb-6 ${colors[type]}`}>
+      <h3 className="font-medium">{title}</h3>
+      <p className="text-sm">{message}</p>
+    </div>
+  );
+}
+
+// ✅ Filters bar component
+function FiltersBar({ search, setSearch, brand, setBrand, brands, sort, setSort, toggleUpload }: {
+  search: string;
+  setSearch: (value: string) => void;
+  brand: string;
+  setBrand: (value: string) => void;
+  brands: string[];
+  sort: string;
+  setSort: (value: string) => void;
+  toggleUpload: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-4 bg-white p-4 rounded-lg shadow">
+      <input
+        type="text"
+        placeholder="Search sneakers..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="flex-1 px-4 py-2 border rounded-lg"
+      />
+      <select value={brand} onChange={(e) => setBrand(e.target.value)} className="px-4 py-2 border rounded-lg">
+        <option value="">All Brands</option>
+        {brands.map((b: string) => (
+          <option key={b} value={b}>{b}</option>
+        ))}
+      </select>
+      <select value={sort} onChange={(e) => setSort(e.target.value)} className="px-4 py-2 border rounded-lg">
+        <option value="name">Sort: Name</option>
+        <option value="price">Sort: Price</option>
+      </select>
+      <button onClick={toggleUpload} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <Upload size={18} /> Upload
+      </button>
+    </div>
+  );
+}
+
+// ✅ Upload panel (collapsible instead of modal)
+function UploadPanel({ visible, onClose, onSubmit }: {
+  visible: boolean;
+  onClose: () => void;
+  onSubmit: (image: File, description: string) => void;
+}) {
   const [image, setImage] = useState<File | null>(null);
   const [description, setDescription] = useState("");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [selectedBrand, setSelectedBrand] = useState("");
-  const [priceRange, setPriceRange] = useState("");
-  const [sortBy, setSortBy] = useState("name");
-  
-  // New state for API integration
-  const [sneakers, setSneakers] = useState<Sneaker[]>([]);
-  const [brands, setBrands] = useState<string[]>([]);
-  const [apiLoading, setApiLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [uploadResult, setUploadResult] = useState<any>(null);
-  const [dataSource, setDataSource] = useState<string>("Real API");
-  const [apiConfigured, setApiConfigured] = useState<boolean>(true);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // Load initial data
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
-  // Load sneakers when filters change
-  useEffect(() => {
-    loadSneakers();
-  }, [searchQuery, selectedBrand, priceRange, sortBy]);
-
-  const loadInitialData = async () => {
-    try {
-      setApiLoading(true);
-      setError(null);
-      
-      // Load brands
-      const brandsResponse = await getBrands();
-      if (brandsResponse.success) {
-        setBrands(brandsResponse.data);
-      }
-      
-      // Load sneakers
-      await loadSneakers();
-    } catch (err) {
-      setError('Failed to load data. Please check if the backend is running.');
-      console.error('Error loading initial data:', err);
-    } finally {
-      setApiLoading(false);
-    }
-  };
-
-  const loadSneakers = async () => {
-    try {
-      setError(null);
-      const filters: SearchFilters = {
-        search: searchQuery || undefined,
-        brand: selectedBrand || undefined,
-        priceRange: priceRange || undefined,
-        sortBy: sortBy || undefined,
-      };
-      
-      const response = await getSneakers(filters);
-      if (response.success) {
-        setSneakers(response.data);
-        setDataSource(response.hasRealData ? 'Real API' : 'Mock Data');
-        setApiConfigured(response.data.length > 0 || !!response.hasRealData);
-      } else {
-        setError(response.error || 'Failed to load sneakers');
-        setApiConfigured(false);
-      }
-    } catch (err) {
-      setError('Failed to load sneakers. Please check if the backend is running.');
-      console.error('Error loading sneakers:', err);
-      setApiConfigured(false);
-    }
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
       const file = e.target.files[0];
       setImage(file);
-
-      // Create a local URL for preview
-      const previewUrl = URL.createObjectURL(file);
-      setImagePreview(previewUrl);
+      setPreviewUrl(URL.createObjectURL(file));
     }
   };
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const handleSubmit = () => {
     if (!image) return;
+    onSubmit(image, description);
+    setImage(null);
+    setDescription("");
+    setPreviewUrl(null);
+    onClose();
+  };
 
-    setLoading(true);
-    setError(null);
-    setUploadResult(null);
+  if (!visible) return null;
 
+  return (
+    <div className="bg-gray-50 p-4 rounded-lg border shadow-md mt-4">
+      <h2 className="text-lg font-semibold mb-2">Upload Sneaker Image</h2>
+      <input type="file" accept="image/*" onChange={handleImageChange} className="mb-2" />
+      {previewUrl && <img src={previewUrl} alt="Preview" className="max-h-40 rounded mb-2" />}
+      <textarea
+        placeholder="Description"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        className="w-full border rounded-lg p-2 mb-2"
+      />
+      <div className="flex gap-2">
+        <button onClick={handleSubmit} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+          Submit
+        </button>
+        <button onClick={onClose} className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ✅ Main Home page
+export default function Home() {
+  const [sneakers, setSneakers] = useState<Sneaker[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [brand, setBrand] = useState("");
+  const [sort, setSort] = useState("name");
+  const [error, setError] = useState<string | null>(null);
+  const [uploadVisible, setUploadVisible] = useState(false);
+
+  const fetchSneakers = useCallback(async () => {
     try {
-      const response = await uploadImage(description);
+      setError(null);
+      const res = await fetch(`/api/search?search=${search}&brand=${brand}&sortBy=${sort}`);
+      if (!res.ok) throw new Error("Failed to fetch sneakers");
+      const data = await res.json();
       
-      if (response.success) {
-        setUploadResult(response);
-        // Reload sneakers to show any new data
-        await loadSneakers();
-      } else {
-        setError('Failed to analyze image');
-      }
-    } catch (err) {
-      setError('Failed to upload image. Please check if the backend is running.');
-      console.error('Error uploading image:', err);
-    } finally {
-      setLoading(false);
+      // Transform data to match Sneaker interface
+      const transformedSneakers = data.data?.map((sneaker: any) => ({
+        id: sneaker.id,
+        name: sneaker.name,
+        brand: sneaker.brand,
+        colorway: sneaker.colorway || "Default Colorway",
+        price: sneaker.price,
+        image: sneaker.image,
+        rating: typeof sneaker.rating === 'string' ? parseFloat(sneaker.rating) : sneaker.rating || 0,
+        reviews: sneaker.reviews || 0,
+        store: sneaker.store || "Unknown Store",
+        description: sneaker.description,
+        isRealData: sneaker.isRealData || false
+      })) || [];
       
-      // Clear inputs after submit
-      setImage(null);
-      setImagePreview(null);
-      setDescription("");
+      setSneakers(transformedSneakers);
+      setBrands(data.brands || []);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, [search, brand, sort]);
+
+  useEffect(() => {
+    fetchSneakers();
+  }, [fetchSneakers]);
+
+  const handleUpload = async (image: File, description: string) => {
+    try {
+      const formData = new FormData();
+      formData.append("image", image);
+      formData.append("description", description);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      await fetchSneakers();
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Sneaker Search</h1>
-          <p className="text-gray-600">Find, identify, and compare sneaker prices</p>
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto flex items-center justify-between p-4">
+          <Link href="/" className="text-2xl font-bold">SneakerVault</Link>
+          <nav className="hidden md:flex gap-6">
+            <Link href="/" className="hover:underline">Home</Link>
+            <Link href="/about" className="hover:underline">About</Link>
+            <Link href="/contact" className="hover:underline">Contact</Link>
+          </nav>
+          <button className="md:hidden"><Menu size={24} /></button>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* API Configuration Warning */}
-        {!apiConfigured && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">API Configuration Required</h3>
-                <p className="text-sm text-yellow-700 mt-1">
-                  No sneaker data is available. Please configure your RapidAPI key in the backend environment variables.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error Banner */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Upload Result */}
-        {uploadResult && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-green-800">Analysis Complete!</h3>
-                {uploadResult.identifiedSneaker && (
-                  <p className="text-sm text-green-700 mt-1">
-                    Identified: {uploadResult.identifiedSneaker.name} ({uploadResult.identifiedSneaker.brand})
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Upload Section */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Upload Sneaker Image</h2>
-          <form onSubmit={handleFormSubmit} className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Upload Image
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description (Optional)
-                </label>
-                <textarea
-                  placeholder="Describe the sneaker, color, or any details..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-            
-            {imagePreview && (
-              <div className="flex items-center gap-4">
-                <img
-                  src={imagePreview}
-                  alt="Preview"
-                  className="w-24 h-24 object-cover rounded-lg shadow-md"
-                />
-                <div>
-                  <p className="text-sm text-gray-600">Image preview ready</p>
-                  <p className="text-xs text-gray-500">Click submit to analyze</p>
-                </div>
-              </div>
-            )}
-            
-            <button
-              type="submit"
-              disabled={loading || !image}
-              className={`px-6 py-3 rounded-lg text-white font-medium transition-colors ${
-                loading || !image 
-                  ? "bg-gray-400 cursor-not-allowed" 
-                  : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                  </svg>
-                  Analyzing...
-                </span>
-              ) : (
-                "Analyze Sneaker"
-              )}
-            </button>
-          </form>
+      {/* Hero */}
+      <section className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-20">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-4xl font-bold mb-4">Discover Your Next Pair</h1>
+          <p className="text-lg mb-6">Search, filter, and upload sneakers with ease.</p>
         </div>
+      </section>
 
-        {/* Search and Filters */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
-          <div className="flex flex-col lg:flex-row gap-4 mb-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Search Sneakers
-              </label>
-              <input
-                type="text"
-                placeholder="Search by name, brand, or store..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div className="flex gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Brand
-                </label>
-                <select
-                  value={selectedBrand}
-                  onChange={(e) => setSelectedBrand(e.target.value)}
-                  className="px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">All Brands</option>
-                  {brands.map((brand, idx) => (
-                    <option key={idx} value={brand}>{brand}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Price Range
-                </label>
-                <select
-                  value={priceRange}
-                  onChange={(e) => setPriceRange(e.target.value)}
-                  className="px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">All Prices</option>
-                  <option value="0-100">$0 - $100</option>
-                  <option value="100-200">$100 - $200</option>
-                  <option value="200+">$200+</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sort By
-                </label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="name">Name</option>
-                  <option value="price-low">Price: Low to High</option>
-                  <option value="price-high">Price: High to Low</option>
-                  <option value="rating">Rating</option>
-                </select>
-              </div>
-            </div>
-          </div>
-          
-          {/* Data Source Info */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-gray-600">
-              Data Source: <span className="font-medium">{dataSource}</span>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>{sneakers.length} sneakers found</span>
-            {searchQuery && (
-              <span>Results for "{searchQuery}"</span>
-            )}
-          </div>
-        </div>
+      <main className="max-w-7xl mx-auto p-4">
+        {error && <StatusBanner type="error" title="Error" message={error} />}
 
-        {/* Loading State */}
-        {apiLoading && (
-          <div className="text-center py-12">
-            <div className="flex items-center justify-center">
-              <svg className="animate-spin h-8 w-8 text-blue-600" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-              </svg>
-              <span className="ml-3 text-gray-600">Loading sneakers...</span>
-            </div>
-          </div>
-        )}
+        <FiltersBar
+          search={search}
+          setSearch={setSearch}
+          brand={brand}
+          setBrand={setBrand}
+          brands={brands}
+          sort={sort}
+          setSort={setSort}
+          toggleUpload={() => setUploadVisible((v) => !v)}
+        />
 
-        {/* Results Grid */}
-        {!apiLoading && sneakers.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sneakers.map((sneaker) => (
-              <div key={sneaker.id} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow duration-200 overflow-hidden">
-                <div className="relative">
-                  <img
-                    src={sneaker.image}
-                    alt={sneaker.name}
-                    className="w-full h-64 object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://via.placeholder.com/300x200?text=Sneaker';
-                    }}
-                  />
-                  <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded-full text-xs font-medium text-gray-700 shadow-sm">
-                    {sneaker.brand}
-                  </div>
-                  {sneaker.isRealData && (
-                    <div className="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-                      Real Data
-                    </div>
-                  )}
-                </div>
-                <div className="p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{sneaker.name}</h3>
-                  <p className="text-sm text-gray-600 mb-2">{sneaker.colorway}</p>
-                  
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="flex items-center">
-                      {[...Array(5)].map((_, i) => (
-                        <svg
-                          key={i}
-                          className={`w-4 h-4 ${i < Math.floor(sneaker.rating) ? 'text-yellow-400' : 'text-gray-300'}`}
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                    </div>
-                    <span className="text-sm text-gray-600">({sneaker.reviews})</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-2xl font-bold text-gray-900">${sneaker.price}</p>
-                      <p className="text-sm text-gray-600">{sneaker.store}</p>
-                    </div>
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
-                      View Details
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <UploadPanel
+          visible={uploadVisible}
+          onClose={() => setUploadVisible(false)}
+          onSubmit={handleUpload}
+        />
 
-        {/* No Results */}
-        {!apiLoading && sneakers.length === 0 && !error && (
-          <div className="text-center py-12">
-            <div className="text-gray-400 mb-4">
-              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No sneakers found</h3>
-            <p className="text-gray-600">
-              {searchQuery 
-                ? `No results for "${searchQuery}". Try adjusting your search or filters.`
-                : "Try uploading an image or adjusting your search criteria."
-              }
-            </p>
-          </div>
-        )}
-      </div>
-    </main>
+        <SneakerGrid sneakers={sneakers} />
+      </main>
+    </div>
   );
 }

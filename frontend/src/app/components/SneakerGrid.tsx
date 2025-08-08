@@ -1,16 +1,6 @@
 import React from 'react';
 import SneakerCard from './SneakerCard';
-
-interface Sneaker {
-  id: number;
-  name: string;
-  brand: string;
-  price: number;
-  image: string;
-  rating: string;
-  reviews: number;
-  store: string;
-}
+import { Sneaker } from '../types/sneaker';
 
 interface SneakerGridProps {
   sneakers: Sneaker[];
