@@ -28,6 +28,29 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is healthy', timestamp: new Date().toISOString() });
 });
 
+// KicksCrew API health check
+app.get('/api/health/kickscrew', async (req, res) => {
+  try {
+    const { fetchRealSneakerData } = await import('./utils/sneakerApi.js');
+    const testResponse = await fetchRealSneakerData('nike');
+    
+    res.json({ 
+      status: 'healthy', 
+      apiWorking: testResponse.length > 0,
+      dataCount: testResponse.length,
+      timestamp: new Date().toISOString(),
+      apiKeyConfigured: !!process.env.RAPIDAPI_KEY
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'unhealthy', 
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      apiKeyConfigured: !!process.env.RAPIDAPI_KEY
+    });
+  }
+});
+
 app.get('/api/brands', async (req, res) => {
   try {
     // Check if API key is available

@@ -2,6 +2,12 @@ import express from 'express';
 import { fetchRealSneakerData } from '../utils/sneakerApi.js';
 
 const router = express.Router();
+if (!process.env.RAPIDAPI_KEY) {
+  return res.status(500).json({
+    success: false,
+    error: 'RapidAPI key is missing. Please set RAPIDAPI_KEY in your backend .env file.'
+  });
+}
 
 // GET /api/search - Advanced search with filters
 router.get('/', async (req, res) => {
